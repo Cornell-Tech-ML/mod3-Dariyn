@@ -356,7 +356,7 @@ def tensor_reduce(
         pos = cuda.threadIdx.x
 
         if out_pos < out_size:
-            cache[pos] = reduce_value
+            cache[pos] = reduce_value 
             to_index(out_pos, out_shape, out_index)
             out_index[reduce_dim] = out_index[reduce_dim] * BLOCK_DIM + pos
             if out_index[reduce_dim] < a_shape[reduce_dim]:
@@ -498,31 +498,35 @@ def _tensor_matrix_multiply(
     #    b) Copy into shared memory for b matrix
     #    c) Compute the dot produce for position c[i, j]
     result = 0.0
-    for k_block in range(0, a_shape[-1], BLOCK_DIM):
+    a_rows = a_shape[-2]
+    k_size = a_shape[-1]
+    b_cols = b_shape[-1]
+
+    for k_block in range(0, k_size, BLOCK_DIM):
         a_i = i
         a_j = k_block + pj
-        if a_i < a_shape[-2] and a_j < a_shape[-1]:
+        if a_i < a_rows and a_j < k_size:
             a_shared[pi, pj] = a_storage[
-                a_i * a_strides[-2] + a_j * a_strides[-1] + batch * a_batch_stride
+                batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
             ]
         else:
             a_shared[pi, pj] = 0.0
 
         b_i = k_block + pi
         b_j = j
-        if b_i < a_shape[-1] and b_j < b_shape[-1]:
+        if b_i < k_size and b_j < b_cols:
             b_shared[pi, pj] = b_storage[
-                b_j * b_strides[-1] + batch * b_batch_stride + b_i * b_strides[-2]
+                batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
             ]
         else:
             b_shared[pi, pj] = 0.0
 
         cuda.syncthreads()
-        for k in range(min(BLOCK_DIM, a_shape[-1] - k_block)):
+        for k in range(min(BLOCK_DIM, k_size - k_block)):
             result += a_shared[pi, k] * b_shared[k, pj]
 
         cuda.syncthreads()
-    if i < a_shape[-2] and j < b_shape[-1]:
+    if i < a_rows and j < b_cols:
         out[batch * out_strides[0] + i * out_strides[1] + j * out_strides[2]] = result
 
 
