@@ -92,7 +92,7 @@ class FastTrain:
                 optim.step()
             end_time = time.time()
             epoch_time = end_time - start_time
-            print(f"\nTime for Epoch {}: {epoch_time:.3f}")
+            print(f"\nTime for Epoch: {epoch_time:.3f}")
 
             epoch_times.append(epoch_time)
             losses.append(total_loss)
