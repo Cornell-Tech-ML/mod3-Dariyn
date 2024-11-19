@@ -465,7 +465,7 @@ def _tensor_matrix_multiply(
     # Compute global indices for the thread.
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
-    
+
     # Compute local indices within the block.
     pi = cuda.threadIdx.x
     pj = cuda.threadIdx.y
@@ -479,7 +479,7 @@ def _tensor_matrix_multiply(
     # Initialize the result for the current thread.
     result = 0.0
 
-    # Loop over shared dimensions in blocks of size `BLOCK_DIM`.    
+    # Loop over shared dimensions in blocks of size `BLOCK_DIM`.
     for k_block in range(0, a_shape[-1], BLOCK_DIM):
         # Load sub-block from A into shared memory.
         a_i = i
@@ -489,7 +489,7 @@ def _tensor_matrix_multiply(
                 batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
             ]
         else:
-            a_shared[pi, pj] = 0.0 # Fill with 0 for out-of-bounds elements.
+            a_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
         # Load sub-block from B into shared memory
         b_i = k_block + pi
@@ -499,7 +499,7 @@ def _tensor_matrix_multiply(
                 batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
             ]
         else:
-            b_shared[pi, pj] = 0.0 # Fill with 0 for out-of-bounds elements.
+            b_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
         # Synchronize threads to ensure all shared memory is filled.
         cuda.syncthreads()
