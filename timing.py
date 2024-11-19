@@ -1,6 +1,8 @@
 import minitorch
 import time
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
 GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
@@ -55,3 +57,18 @@ if __name__ == "__main__":
         print(f"Size: {size}")
         for b, t in stimes.items():
             print(f"    {b}: {t:.5f}")
+
+# Generate timing comparison graph
+sizes = list(times.keys())
+fast_times = [times[size]["fast"] for size in sizes]
+gpu_times = [times[size]["gpu"] for size in sizes]
+
+plt.figure(figsize=(10, 6))
+plt.plot(sizes, fast_times, label="Fast Tensor Backend (CPU)", marker="o")
+plt.plot(sizes, gpu_times, label="GPU Backend (CUDA)", marker="o")
+plt.title("Performance Comparison: Fast Tensor Backend vs GPU Backend")
+plt.xlabel("Matrix Size (NxN)")
+plt.ylabel("Average Time (seconds)")
+plt.legend()
+plt.grid(True)
+plt.show()
