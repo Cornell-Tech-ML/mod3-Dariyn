@@ -6,7 +6,7 @@ FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
 GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
 
 
-def run_matmul(backend: minitorch.TensorBackend, size: int = 16) -> None:
+def run_matmul(backend: minitorch.TensorBackend, size: int = 16) -> minitorch.Tensor:
     """Run matrix multiplication using the specified backend and size."""
     batch_size = 2
 
@@ -15,6 +15,7 @@ def run_matmul(backend: minitorch.TensorBackend, size: int = 16) -> None:
     z = x @ y
 
     return z
+
 
 if __name__ == "__main__":
     # Warmup
@@ -54,4 +55,3 @@ if __name__ == "__main__":
         print(f"Size: {size}")
         for b, t in stimes.items():
             print(f"    {b}: {t:.5f}")
-
