@@ -488,40 +488,36 @@ def _tensor_matrix_multiply(
     # Accumulator for out[i,j] -> this thread will compute this value.
     acc = 0.0
 
-    a_rows = a_shape[-2]
-    k_size = a_shape[-1]
-    b_cols = b_shape[-1]
+    m = out_shape[-2]
+    n = out_shape[-1]
+    k = a_shape[-1]
 
-    for k_block in range(0, k_size, BLOCK_DIM):
-        # Read a in shared memory
-        a_i = i
-        a_j = k_block + pj
-        if a_i < a_rows and a_j < k_size:
-            a_shared[pi, pj] = a_storage[
-                batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
-            ]
-        else:
-            a_shared[pi, pj] = 0.0
+    tiles = (K + BLOCK_DIM - 1) // BLOCK_DIM
+    a_i = i
+    a_j = pj
+    b_i = pi
+    b_j = j
+    for t in range(tiles):
+        if a_i < m and a_j < k:
+            a_index = batch * a_batch_stride + a_i * a_strides[-1] + a_j * a_strides[-2]
+            a_shared[x, y] = a_storage[a_index]
 
-        # Read b in shared memory
-        b_i = k_block + pi
-        b_j = j
-        if b_i < k_size and b_j < b_cols:
-            b_shared[pi, pj] = b_storage[
-                batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
-            ]
-        else:
-            b_shared[pi, pj] = 0.0
-
-        cuda.syncthreads()
-        for k in range(min(BLOCK_DIM, k_size - k_block)):
-            acc += a_shared[pi, k] * b_shared[k, pj]
+        if b_i < k and b_j < n:
+            b_index = batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
+            b_shared[y, x] = b_storage[b_index]
 
         cuda.syncthreads()
 
-    # Write computed value into global memory
-    if i < a_rows and j < b_cols:
-        out[batch * out_strides[0] + i * out_strides[1] + j * out_strides[2]] = acc
+        for k in range(BLOCK_DIM):
+            if (t * BLOCK_DIM + k) < K:
+                acc += a_shared[pi, k] * b_shared[pj, k]
+
+        a_j += BLOCK_DIM
+        b_i += BLOCK_DIM
+
+    if i < m and j < n:
+        out_index = batch * out_strides[0] + i * out_strides[1] + j * out_strides[2]
+        out[out_index] = acc
 
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)
