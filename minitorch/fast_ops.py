@@ -177,12 +177,20 @@ def tensor_map(
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        if np.array_equal(in_strides, out_strides) and np.array_equal(in_shape, out_shape):
-            for i in prange(len(out)):  # Parallel loop over all elements in the output tensor.
-                out[i] = fn(in_storage[i])  # Directly apply the function `fn` to the input element.
+        if np.array_equal(in_strides, out_strides) and np.array_equal(
+            in_shape, out_shape
+        ):
+            for i in prange(
+                len(out)
+            ):  # Parallel loop over all elements in the output tensor.
+                out[i] = fn(
+                    in_storage[i]
+                )  # Directly apply the function `fn` to the input element.
 
         else:
-            for i in prange(len(out)):  # Parallel loop over all elements in the output tensor.
+            for i in prange(
+                len(out)
+            ):  # Parallel loop over all elements in the output tensor.
                 # Create index arrays for navigating the output and input tensors.
                 out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 in_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
@@ -238,10 +246,10 @@ def tensor_zip(
         b_strides: Strides,
     ) -> None:
         if (
-        np.array_equal(a_strides, b_strides)
-        and np.array_equal(a_strides, out_strides)
-        and np.array_equal(a_shape, b_shape)
-        and np.array_equal(a_shape, out_shape)
+            np.array_equal(a_strides, b_strides)
+            and np.array_equal(a_strides, out_strides)
+            and np.array_equal(a_shape, b_shape)
+            and np.array_equal(a_shape, out_shape)
         ):
             for i in prange(len(out)):  # Parallel loop over all output elements.
                 out[i] = fn(a_storage[i], b_storage[i])  # Apply function directly.
@@ -323,6 +331,7 @@ def tensor_reduce(
 
                 # Apply the reduction function to combine the current value and the input element.
                 out[o] = fn(out[o], a_storage[j])
+
     return njit(_reduce, parallel=True)  # type: ignore
 
 
@@ -389,9 +398,15 @@ def _tensor_matrix_multiply(
 
                 # Reduction loop over the shared dimension.
                 for _ in range(a_shape[-1]):
-                    acc += a_storage[a_pos] * b_storage[b_pos]  # Dot product accumulation.
-                    a_pos += a_strides[-1]  # Move to the next element in the current row of `a`.
-                    b_pos += b_strides[-2]  # Move to the next element in the current column of `b`.
+                    acc += (
+                        a_storage[a_pos] * b_storage[b_pos]
+                    )  # Dot product accumulation.
+                    a_pos += a_strides[
+                        -1
+                    ]  # Move to the next element in the current row of `a`.
+                    b_pos += b_strides[
+                        -2
+                    ]  # Move to the next element in the current column of `b`.
 
                 # Compute the position in the output tensor and store the result.
                 o = j * out_strides[-2] + i * out_strides[-1] + batch * out_strides[0]
