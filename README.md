@@ -362,3 +362,28 @@ Allocation hoisting:
 No allocation hoisting found
 None
 ```
+
+Task 3.4
+We can see that GPU does indeed run faster for larger matrices
+<img src="images/3.4_timing.png" width="50%">
+
+
+Task 3.5
+
+Split gpu
+<img src="images/3.5_split_gpu.png" width="50%">
+
+Split cpu
+<img src="images/3.5_split_cpu.png" width="50%">
+
+Simple gpu
+<img src="images/3.5_simple_gpu.png" width="50%">
+
+Simple cpu
+<img src="images/3.5_simple_cpu.png" width="50%">
+
+Xor gpu
+<img src="images/3.5_xor_gpu.png" width="50%">
+
+Xor cpu
+<img src="images/3.5_xor_cpu.png" width="50%">
