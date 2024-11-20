@@ -310,27 +310,30 @@ def tensor_reduce(
         reduce_dim: int,
     ) -> None:
         # Parallel loop over all output positions.
-        for i in prange(len(out)):  # `prange` enables parallelism.
-            # Initialize an index array for navigating the output tensor.
-            out_index: Index = np.zeros(len(out_shape), dtype=np.int32)
-            reduce_size = a_shape[reduce_dim]  # Size of the dimension to reduce.
-
-            # Convert the flat output index `i` into a multi-dimensional index.
+        for i in prange(len(out)):
+            out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+            # Convert the flat output index `i` to a multi-dimensional index.
             to_index(i, out_shape, out_index)
 
-            # Calculate the output position in the flattened storage.
+            # Compute the output position in the flat storage.
             o = index_to_position(out_index, out_strides)
 
-            # Loop over the dimension to reduce, accumulating results using the reduction function `fn`.
-            for step in range(reduce_size):
-                # Update the index along the reduction dimension.
-                out_index[reduce_dim] = step
+            # Compute the input position corresponding to the output position.
+            j = index_to_position(out_index, a_strides)
 
-                # Convert the updated multi-dimensional index to the corresponding input position.
-                j = index_to_position(out_index, a_strides)
+            # Initialize the accumulator with the current value in the output tensor.
+            acc = out[o]
 
-                # Apply the reduction function to combine the current value and the input element.
-                out[o] = fn(out[o], a_storage[j])
+            # Compute the stride step along the reduction dimension.
+            step = a_strides[reduce_dim]
+
+            # Iterate over the reduction dimension and accumulate results.
+            for _ in range(a_shape[reduce_dim]):
+                acc = fn(acc, a_storage[j])  # Apply the reduction function.
+                j += step  # Move to the next element in the reduction dimension.
+
+            # Store the accumulated result back into the output tensor.
+            out[o] = acc
 
     return njit(_reduce, parallel=True)  # type: ignore
 
@@ -387,11 +390,11 @@ def _tensor_matrix_multiply(
     # Outer loop over the batch dimension (parallelized).
     for batch in prange(out_shape[0]):
         # Loop over the rows (j) and columns (i) of the output matrix.
-        for i in range(out_shape[-1]):  # Column index in the output matrix.
-            for j in range(out_shape[-2]):  # Row index in the output matrix.
+        for i in range(out_shape[-2]):  # Column index in the output matrix.
+            for j in range(out_shape[-1]):  # Row index in the output matrix.
                 # Compute the starting positions for the current row of `a` and column of `b`.
-                a_pos = batch * a_batch_stride + j * a_strides[-2]
-                b_pos = batch * b_batch_stride + i * b_strides[-1]
+                a_pos = batch * a_batch_stride + i * a_strides[-2]
+                b_pos = batch * b_batch_stride + j * b_strides[-1]
 
                 # Initialize the accumulator for the dot product.
                 acc = 0.0
@@ -409,7 +412,7 @@ def _tensor_matrix_multiply(
                     ]  # Move to the next element in the current column of `b`.
 
                 # Compute the position in the output tensor and store the result.
-                o = j * out_strides[-2] + i * out_strides[-1] + batch * out_strides[0]
+                o = i * out_strides[-2] + j * out_strides[-1] + batch * out_strides[0]
                 out[o] = acc  # Store the accumulated value.
 
 
