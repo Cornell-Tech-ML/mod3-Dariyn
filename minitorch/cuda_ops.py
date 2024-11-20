@@ -493,7 +493,9 @@ def _tensor_matrix_multiply(
         a_i = i
         a_j = block + pj
         if a_i < a_shape[-2] and a_j < a_shape[-1]:
-            a_shared[pi, pj] = a_storage[batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]]
+            a_shared[pi, pj] = a_storage[
+                batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
+            ]
         else:
             a_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
@@ -501,7 +503,9 @@ def _tensor_matrix_multiply(
         b_i = block + pi
         b_j = j
         if b_i < a_shape[-1] and b_j < b_shape[-1]:
-            b_shared[pi, pj] = b_storage[batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]]
+            b_shared[pi, pj] = b_storage[
+                batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
+            ]
         else:
             b_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
