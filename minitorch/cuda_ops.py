@@ -265,12 +265,14 @@ def _sum_practice(out: Storage, a: Storage, size: int) -> None:
         cache[pos] = 0
     cuda.syncthreads()
 
-    stride = BLOCK_DIM // 2
-    while stride > 0:
-        if pos < stride:
+    stride = 1
+    while stride < BLOCK_DIM:
+        if pos % (2 * stride) == 0:
             cache[pos] += cache[pos + stride]
+        stride *= 2
         cuda.syncthreads()
-        stride //= 2
+
+    # Store result from first thread in each block
     if pos == 0:
         out[cuda.blockIdx.x] = cache[0]
 
@@ -337,12 +339,14 @@ def tensor_reduce(
             if out_index[reduce_dim] < a_shape[reduce_dim]:
                 cache[pos] = a_storage[index_to_position(out_index, a_strides)]
                 cuda.syncthreads()
-                stride = BLOCK_DIM // 2
-                while stride > 0:
-                    if pos < stride:
+                stride = 1
+                while stride < BLOCK_DIM:
+                    if pos % (2 * stride) == 0:
                         cache[pos] += cache[pos + stride]
+                    stride *= 2
                     cuda.syncthreads()
-                    stride //= 2
+
+                # Store result from first thread in each block
                 if pos == 0:
                     out[cuda.blockIdx.x] = cache[0]
 
