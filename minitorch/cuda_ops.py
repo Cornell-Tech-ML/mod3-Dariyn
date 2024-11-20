@@ -468,6 +468,8 @@ def _tensor_matrix_multiply(
     a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
     b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
 
+    assert a_shape[-1] == b_shape[-2]
+
     # Compute global indices for the thread.
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
@@ -486,24 +488,20 @@ def _tensor_matrix_multiply(
     result = 0.0
 
     # Loop over shared dimensions in blocks of size `BLOCK_DIM`.
-    for k_block in range(0, a_shape[-1], BLOCK_DIM):
+    for block in range(0, a_shape[-1], BLOCK_DIM):
         # Load sub-block from A into shared memory.
         a_i = i
-        a_j = k_block + pj
+        a_j = block + pj
         if a_i < a_shape[-2] and a_j < a_shape[-1]:
-            a_shared[pi, pj] = a_storage[
-                batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
-            ]
+            a_shared[pi, pj] = a_storage[batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]]
         else:
             a_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
         # Load sub-block from B into shared memory
-        b_i = k_block + pi
+        b_i = block + pi
         b_j = j
         if b_i < a_shape[-1] and b_j < b_shape[-1]:
-            b_shared[pi, pj] = b_storage[
-                batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
-            ]
+            b_shared[pi, pj] = b_storage[batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]]
         else:
             b_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
 
@@ -511,7 +509,7 @@ def _tensor_matrix_multiply(
         cuda.syncthreads()
 
         # Compute the partial dot product for this block.
-        for k in range(min(BLOCK_DIM, a_shape[-1] - k_block)):
+        for k in range(min(BLOCK_DIM, a_shape[-1] - block)):
             result += a_shared[pi, k] * b_shared[k, pj]
 
         # Synchronize threads to avoid race conditions for the next block.
