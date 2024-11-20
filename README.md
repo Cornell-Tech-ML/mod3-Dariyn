@@ -203,86 +203,71 @@ D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (303)
 
 
 Parallel loop listing for  Function tensor_reduce.<locals>._reduce, D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (303)
-------------------------------------------------------------------------------------------------------------|loop #ID
-    def _reduce(                                                                                            |
-        out: Storage,                                                                                       |
-        out_shape: Shape,                                                                                   |
-        out_strides: Strides,                                                                               |
-        a_storage: Storage,                                                                                 |
-        a_shape: Shape,                                                                                     |
-        a_strides: Strides,                                                                                 |
-        reduce_dim: int,                                                                                    |
-    ) -> None:                                                                                              |
-        # Parallel loop over all output positions.                                                          |
-        for i in prange(len(out)):  # `prange` enables parallelism.-----------------------------------------| #5
-            # Initialize an index array for navigating the output tensor.                                   |
-            out_index: Index = np.zeros(len(out_shape), dtype=np.int32)-------------------------------------| #4
-            reduce_size = a_shape[reduce_dim]  # Size of the dimension to reduce.                           |
-                                                                                                            |
-            # Convert the flat output index `i` into a multi-dimensional index.                             |
-            to_index(i, out_shape, out_index)                                                               |
-                                                                                                            |
-            # Calculate the output position in the flattened storage.                                       |
-            o = index_to_position(out_index, out_strides)                                                   |
-                                                                                                            |
-            # Loop over the dimension to reduce, accumulating results using the reduction function `fn`.    |
-            for step in range(reduce_size):                                                                 |
-                # Update the index along the reduction dimension.                                           |
-                out_index[reduce_dim] = step                                                                |
-                                                                                                            |
-                # Convert the updated multi-dimensional index to the corresponding input position.          |
-                j = index_to_position(out_index, a_strides)                                                 |
-                                                                                                            |
-                # Apply the reduction function to combine the current value and the input element.          |
-                out[o] = fn(out[o], a_storage[j])                                                           |
+-----------------------------------------------------------------------------------------|loop #ID
+    def _reduce(                                                                         |
+        out: Storage,                                                                    |
+        out_shape: Shape,                                                                |
+        out_strides: Strides,                                                            |
+        a_storage: Storage,                                                              |
+        a_shape: Shape,                                                                  |
+        a_strides: Strides,                                                              |
+        reduce_dim: int,                                                                 |
+    ) -> None:                                                                           |
+        # Parallel loop over all output positions.                                       |
+        for i in prange(len(out)):-------------------------------------------------------| #4
+            out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)                        |
+            # Convert the flat output index `i` to a multi-dimensional index.            |
+            to_index(i, out_shape, out_index)                                            |
+                                                                                         |
+            # Compute the output position in the flat storage.                           |
+            o = index_to_position(out_index, out_strides)                                |
+                                                                                         |
+            # Compute the input position corresponding to the output position.           |
+            j = index_to_position(out_index, a_strides)                                  |
+                                                                                         |
+            # Initialize the accumulator with the current value in the output tensor.    |
+            acc = out[o]                                                                 |
+                                                                                         |
+            # Compute the stride step along the reduction dimension.                     |
+            step = a_strides[reduce_dim]                                                 |
+                                                                                         |
+            # Iterate over the reduction dimension and accumulate results.               |
+            for _ in range(a_shape[reduce_dim]):                                         |
+                acc = fn(acc, a_storage[j])  # Apply the reduction function.             |
+                j += step  # Move to the next element in the reduction dimension.        |
+                                                                                         |
+            # Store the accumulated result back into the output tensor.                  |
+            out[o] = acc                                                                 |
 --------------------------------- Fusing loops ---------------------------------
 Attempting fusion of parallel loops (combines loops with similar properties)...
-Following the attempted fusion of parallel for-loops there are 2 parallel for-
-loop(s) (originating from loops labelled: #5, #4).
---------------------------------------------------------------------------------
----------------------------- Optimising loop nests -----------------------------
-Attempting loop nest rewrites (optimising for the largest parallel loops)...
-
-+--5 is a parallel loop
-   +--4 --> rewritten as a serial loop
+Following the attempted fusion of parallel for-loops there are 1 parallel for-
+loop(s) (originating from loops labelled: #4).
 --------------------------------------------------------------------------------
 ----------------------------- Before Optimisation ------------------------------
-Parallel region 0:
-+--5 (parallel)
-   +--4 (parallel)
-
-
 --------------------------------------------------------------------------------
 ------------------------------ After Optimisation ------------------------------
-Parallel region 0:
-+--5 (parallel)
-   +--4 (serial)
-
-
-
-Parallel region 0 (loop #5) had 0 loop(s) fused and 1 loop(s) serialized as part
- of the larger parallel loop (#5).
+Parallel structure is already optimal.
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 ---------------------------Loop invariant code motion---------------------------
 Allocation hoisting:
 The memory allocation derived from the instruction at
-D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (315) is hoisted out of the parallel
- loop labelled #5 (it will be performed before the loop is executed and reused
+D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (314) is hoisted out of the parallel
+ loop labelled #4 (it will be performed before the loop is executed and reused
 inside the loop):
-   Allocation:: out_index: Index = np.zeros(len(out_shape), dtype=np.int32)
+   Allocation:: out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
     - numpy.empty() is used for the allocation.
 None
 MATRIX MULTIPLY
 
 ================================================================================
  Parallel Accelerator Optimizing:  Function _tensor_matrix_multiply,
-D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (338)
+D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (341)
 ================================================================================
 
 
-Parallel loop listing for  Function _tensor_matrix_multiply, D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (338)
+Parallel loop listing for  Function _tensor_matrix_multiply, D:\cs5781\mod3-Dariyn\minitorch\fast_ops.py (341)
 --------------------------------------------------------------------------------------------------|loop #ID
 def _tensor_matrix_multiply(                                                                      |
     out: Storage,                                                                                 |
@@ -334,13 +319,13 @@ def _tensor_matrix_multiply(                                                    
     assert a_shape[-1] == b_shape[-2]                                                             |
                                                                                                   |
     # Outer loop over the batch dimension (parallelized).                                         |
-    for batch in prange(out_shape[0]):------------------------------------------------------------| #6
+    for batch in prange(out_shape[0]):------------------------------------------------------------| #5
         # Loop over the rows (j) and columns (i) of the output matrix.                            |
-        for i in range(out_shape[-1]):  # Column index in the output matrix.                      |
-            for j in range(out_shape[-2]):  # Row index in the output matrix.                     |
+        for i in range(out_shape[-2]):  # Column index in the output matrix.                      |
+            for j in range(out_shape[-1]):  # Row index in the output matrix.                     |
                 # Compute the starting positions for the current row of `a` and column of `b`.    |
-                a_pos = batch * a_batch_stride + j * a_strides[-2]                                |
-                b_pos = batch * b_batch_stride + i * b_strides[-1]                                |
+                a_pos = batch * a_batch_stride + i * a_strides[-2]                                |
+                b_pos = batch * b_batch_stride + j * b_strides[-1]                                |
                                                                                                   |
                 # Initialize the accumulator for the dot product.                                 |
                 acc = 0.0                                                                         |
@@ -358,12 +343,12 @@ def _tensor_matrix_multiply(                                                    
                     ]  # Move to the next element in the current column of `b`.                   |
                                                                                                   |
                 # Compute the position in the output tensor and store the result.                 |
-                o = j * out_strides[-2] + i * out_strides[-1] + batch * out_strides[0]            |
+                o = i * out_strides[-2] + j * out_strides[-1] + batch * out_strides[0]            |
                 out[o] = acc  # Store the accumulated value.                                      |
 --------------------------------- Fusing loops ---------------------------------
 Attempting fusion of parallel loops (combines loops with similar properties)...
 Following the attempted fusion of parallel for-loops there are 1 parallel for-
-loop(s) (originating from loops labelled: #6).
+loop(s) (originating from loops labelled: #5).
 --------------------------------------------------------------------------------
 ----------------------------- Before Optimisation ------------------------------
 --------------------------------------------------------------------------------

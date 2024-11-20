@@ -460,22 +460,18 @@ def _tensor_matrix_multiply(
     # Batch strides for handling batched matrix multiplication.
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
+    # Batch dimension - fixed
     batch = cuda.blockIdx.z
 
-    # Block dimension for thread blocks.
     BLOCK_DIM = 32
-
-    # Shared memory for holding sub-blocks of A and B matrices.
     a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
     b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
 
-    assert a_shape[-1] == b_shape[-2]
-
-    # Compute global indices for the thread.
+    # The final position c[i, j] (output matrix position)
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
 
-    # Compute local indices within the block.
+    # The local position in the block.
     pi = cuda.threadIdx.x
     pj = cuda.threadIdx.y
 
@@ -485,44 +481,43 @@ def _tensor_matrix_multiply(
     #    b) Copy into shared memory for b matrix
     #    c) Compute the dot produce for position c[i, j]
 
-    # Initialize the result for the current thread.
-    result = 0.0
+    # Accumulator for out[i,j] -> this thread will compute this value.
+    acc = 0.0
 
-    # Loop over shared dimensions in blocks of size `BLOCK_DIM`.
-    for block in range(0, a_shape[-1], BLOCK_DIM):
-        # Load sub-block from A into shared memory.
+    a_rows = a_shape[-2]
+    k_size = a_shape[-1]
+    b_cols = b_shape[-1]
+
+    for k_block in range(0, k_size, BLOCK_DIM):
+        # Read a in shared memory
         a_i = i
-        a_j = block + pj
-        if a_i < a_shape[-2] and a_j < a_shape[-1]:
+        a_j = k_block + pj
+        if a_i < a_rows and a_j < k_size:
             a_shared[pi, pj] = a_storage[
                 batch * a_batch_stride + a_i * a_strides[-2] + a_j * a_strides[-1]
             ]
         else:
-            a_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
+            a_shared[pi, pj] = 0.0
 
-        # Load sub-block from B into shared memory
-        b_i = block + pi
+        # Read b in shared memory
+        b_i = k_block + pi
         b_j = j
-        if b_i < a_shape[-1] and b_j < b_shape[-1]:
+        if b_i < k_size and b_j < b_cols:
             b_shared[pi, pj] = b_storage[
                 batch * b_batch_stride + b_i * b_strides[-2] + b_j * b_strides[-1]
             ]
         else:
-            b_shared[pi, pj] = 0.0  # Fill with 0 for out-of-bounds elements.
+            b_shared[pi, pj] = 0.0
 
-        # Synchronize threads to ensure all shared memory is filled.
+        cuda.syncthreads()
+        for k in range(min(BLOCK_DIM, k_size - k_block)):
+            acc += a_shared[pi, k] * b_shared[k, pj]
+
         cuda.syncthreads()
 
-        # Compute the partial dot product for this block.
-        for k in range(min(BLOCK_DIM, a_shape[-1] - block)):
-            result += a_shared[pi, k] * b_shared[k, pj]
-
-        # Synchronize threads to avoid race conditions for the next block.
-        cuda.syncthreads()
-
-    # Write the final result to global memory if within bounds.
-    if i < a_shape[-2] and j < b_shape[-1]:
-        out[batch * out_strides[0] + i * out_strides[1] + j * out_strides[2]] = result
+    # Write computed value into global memory
+    if i < a_rows and j < b_cols:
+        out[batch * out_strides[0] + i * out_strides[1] + j * out_strides[2]] = acc
 
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)

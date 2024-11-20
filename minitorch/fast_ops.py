@@ -390,11 +390,11 @@ def _tensor_matrix_multiply(
     # Outer loop over the batch dimension (parallelized).
     for batch in prange(out_shape[0]):
         # Loop over the rows (j) and columns (i) of the output matrix.
-        for i in range(out_shape[-2]):  # Column index in the output matrix.
-            for j in range(out_shape[-1]):  # Row index in the output matrix.
+        for i in range(out_shape[-1]):  # Column index in the output matrix.
+            for j in range(out_shape[-2]):  # Row index in the output matrix.
                 # Compute the starting positions for the current row of `a` and column of `b`.
-                a_pos = batch * a_batch_stride + i * a_strides[-2]
-                b_pos = batch * b_batch_stride + j * b_strides[-1]
+                a_pos = batch * a_batch_stride + j * a_strides[-2]
+                b_pos = batch * b_batch_stride + i * b_strides[-1]
 
                 # Initialize the accumulator for the dot product.
                 acc = 0.0
@@ -412,7 +412,7 @@ def _tensor_matrix_multiply(
                     ]  # Move to the next element in the current column of `b`.
 
                 # Compute the position in the output tensor and store the result.
-                o = i * out_strides[-2] + j * out_strides[-1] + batch * out_strides[0]
+                o = j * out_strides[-2] + i * out_strides[-1] + batch * out_strides[0]
                 out[o] = acc  # Store the accumulated value.
 
 
