@@ -386,22 +386,23 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
     a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
     b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
 
-    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
+    i = cuda.threadIdx.x
+    j = cuda.threadIdx.y
 
-    pi = cuda.threadIdx.x
-    pj = cuda.threadIdx.y
-
+    # If within bounds, copy data to shared memory
     if i < size and j < size:
-        a_shared[pi, pj] = a[i * size + j]
-        b_shared[pi, pj] = b[i * size + j]
+        a_shared[j, i] = a[j * size + i]
+        b_shared[j, i] = b[j * size + i]
+
     cuda.syncthreads()
 
+    # Compute the dot product for position out[i, j], and write to global at the end
     if i < size and j < size:
         result = 0.0
         for k in range(size):
-            result += a_shared[i, k] * b_shared[k, j]
-        out[i * size + j] = result
+            result += a_shared[j, k] * b_shared[k, i]
+
+        out[j * size + i] = result
 
 
 jit_mm_practice = jit(_mm_practice)
