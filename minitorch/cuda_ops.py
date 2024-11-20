@@ -181,8 +181,8 @@ def tensor_map(
         if i < out_size:
             to_index(i, out_shape, out_index)
             broadcast_index(out_index, out_shape, in_shape, in_index)
-            j = index_to_position(in_index, in_strides)
-            out[i] = fn(in_storage[j])
+            pos = index_to_position(in_index, in_strides)
+            out[i] = fn(in_storage[pos])
 
     return cuda.jit()(_map)  # type: ignore
 
@@ -226,8 +226,8 @@ def tensor_zip(
         if i < out_size:
             to_index(i, out_shape, out_index)
             broadcast_index(out_index, out_shape, a_shape, a_index)
-            broadcast_index(out_index, out_shape, b_shape, b_index)
             a_pos = index_to_position(a_index, a_strides)
+            broadcast_index(out_index, out_shape, b_shape, b_index)
             b_pos = index_to_position(b_index, b_strides)
             out[i] = fn(a_storage[a_pos], b_storage[b_pos])
 
@@ -262,14 +262,15 @@ def _sum_practice(out: Storage, a: Storage, size: int) -> None:
     if i < size:
         cache[pos] = a[i]
     else:
-        cache[pos] = 0.0
+        cache[pos] = 0
     cuda.syncthreads()
-    stride = 1
-    while stride < BLOCK_DIM:
-        if pos % (2 * stride) == 0:
+
+    stride = BLOCK_DIM // 2
+    while stride > 0:
+        if pos < stride:
             cache[pos] += cache[pos + stride]
-        stride *= 2
         cuda.syncthreads()
+        stride //= 2
     if pos == 0:
         out[cuda.blockIdx.x] = cache[0]
 
@@ -328,6 +329,7 @@ def tensor_reduce(
         out_index = cuda.local.array(MAX_DIMS, numba.int32)
         out_pos = cuda.blockIdx.x
         pos = cuda.threadIdx.x
+
         if out_pos < out_size:
             cache[pos] = reduce_value
             to_index(out_pos, out_shape, out_index)
@@ -335,14 +337,14 @@ def tensor_reduce(
             if out_index[reduce_dim] < a_shape[reduce_dim]:
                 cache[pos] = a_storage[index_to_position(out_index, a_strides)]
                 cuda.syncthreads()
-                stride = 1
-                while stride < BLOCK_DIM:
-                    if pos % (stride * 2) == 0:
-                        cache[pos] = fn(cache[pos], cache[pos + stride])
-                        cuda.syncthreads()
-                    stride *= 2
-            if pos == 0:
-                out[out_pos] = cache[0]
+                stride = BLOCK_DIM // 2
+                while stride > 0:
+                    if pos < stride:
+                        cache[pos] += cache[pos + stride]
+                    cuda.syncthreads()
+                    stride //= 2
+                if pos == 0:
+                    out[cuda.blockIdx.x] = cache[0]
 
     return jit(_reduce)  # type: ignore
 
@@ -380,22 +382,26 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
     """
     BLOCK_DIM = 32
 
-    i = cuda.threadIdx.x
-    j = cuda.threadIdx.y
+    #Shared memory for a and b matrices
+    a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
+    b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
 
-    shared_a = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
-    shared_b = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
+
+    pi = cuda.threadIdx.x
+    pj = cuda.threadIdx.y
+
     if i < size and j < size:
-        shared_a[j, i] = a[j * size + i]
-        shared_b[j, i] = b[j * size + i]
-
+        a_shared[pi, pj] = a[i * size + j]
+        b_shared[pi, pj] = b[i * size + j]
     cuda.syncthreads()
+
     if i < size and j < size:
         result = 0.0
         for k in range(size):
-            result += shared_a[j, k] * shared_b[k, i]
-
-        out[j * size + i] = result
+            result += a_shared[i, k] * b_shared[k, j]
+        out[i * size + j] = result
 
 
 jit_mm_practice = jit(_mm_practice)

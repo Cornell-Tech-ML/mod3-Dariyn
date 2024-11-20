@@ -177,21 +177,28 @@ def tensor_map(
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        if np.array_equal(in_strides, out_strides) and np.array_equal(
-            in_shape, out_shape
-        ):
-            for i in prange(len(out)):
-                out[i] = fn(in_storage[i])
+        if np.array_equal(in_strides, out_strides) and np.array_equal(in_shape, out_shape):
+            for i in prange(len(out)):  # Parallel loop over all elements in the output tensor.
+                out[i] = fn(in_storage[i])  # Directly apply the function `fn` to the input element.
 
         else:
-            for i in prange(len(out)):
+            for i in prange(len(out)):  # Parallel loop over all elements in the output tensor.
+                # Create index arrays for navigating the output and input tensors.
                 out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 in_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+
+                # Convert flat output index into a multidimensional index.
                 to_index(i, out_shape, out_index)
+
+                # Compute the corresponding input index using broadcasting rules.
                 broadcast_index(out_index, out_shape, in_shape, in_index)
-                in_pos = index_to_position(in_index, in_strides)
-                out_pos = index_to_position(out_index, out_strides)
-                out[out_pos] = fn(in_storage[in_pos])
+
+                # Translate multidimensional indices to positions in flat storage.
+                o = index_to_position(out_index, out_strides)  # Output position.
+                j = index_to_position(in_index, in_strides)  # Input position.
+
+                # Apply the function `fn` to the input element and store the result in the output.
+                out[o] = fn(in_storage[j])
 
     return njit(_map, parallel=True)  # type: ignore
 
@@ -231,27 +238,35 @@ def tensor_zip(
         b_strides: Strides,
     ) -> None:
         if (
-            np.array_equal(a_strides, b_strides)
-            and np.array_equal(a_strides, out_strides)
-            and np.array_equal(a_shape, b_shape)
-            and np.array_equal(a_shape, out_shape)
+        np.array_equal(a_strides, b_strides)
+        and np.array_equal(a_strides, out_strides)
+        and np.array_equal(a_shape, b_shape)
+        and np.array_equal(a_shape, out_shape)
         ):
-            for i in prange(len(out)):
-                out[i] = fn(a_storage[i], b_storage[i])
+            for i in prange(len(out)):  # Parallel loop over all output elements.
+                out[i] = fn(a_storage[i], b_storage[i])  # Apply function directly.
 
         else:
-            for i in prange(len(out)):
+            for i in prange(len(out)):  # Parallel loop over all output elements.
+                # Create index arrays for output and input tensors.
                 out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 a_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 b_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+
+                # Convert flat output index into a multidimensional index.
                 to_index(i, out_shape, out_index)
+
+                # Compute corresponding indices for A and B using broadcasting rules.
                 broadcast_index(out_index, out_shape, a_shape, a_index)
                 broadcast_index(out_index, out_shape, b_shape, b_index)
-                out_pos = index_to_position(out_index, out_strides)
-                a_pos = index_to_position(a_index, a_strides)
-                b_pos = index_to_position(b_index, b_strides)
 
-                out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
+                # Convert multidimensional indices to positions in flat storage.
+                o = index_to_position(out_index, out_strides)
+                j = index_to_position(a_index, a_strides)
+                k = index_to_position(b_index, b_strides)
+
+                # Apply the function `fn` and store the result in the output tensor.
+                out[o] = fn(a_storage[j], b_storage[k])
 
     return njit(_zip, parallel=True)  # type: ignore
 
@@ -286,19 +301,28 @@ def tensor_reduce(
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        for i in prange(len(out)):
-            out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
-            to_index(i, out_shape, out_index)
-            out_pos = index_to_position(out_index, out_strides)
-            j = index_to_position(out_index, a_strides)
-            acc = out[out_pos]
-            step = a_strides[reduce_dim]
-            red_size = a_shape[reduce_dim]
-            for _ in range(red_size):
-                acc = fn(acc, a_storage[j])
-                j += step
-            out[out_pos] = acc
+        # Parallel loop over all output positions.
+        for i in prange(len(out)):  # `prange` enables parallelism.
+            # Initialize an index array for navigating the output tensor.
+            out_index: Index = np.zeros(len(out_shape), dtype=np.int32)
+            reduce_size = a_shape[reduce_dim]  # Size of the dimension to reduce.
 
+            # Convert the flat output index `i` into a multi-dimensional index.
+            to_index(i, out_shape, out_index)
+
+            # Calculate the output position in the flattened storage.
+            o = index_to_position(out_index, out_strides)
+
+            # Loop over the dimension to reduce, accumulating results using the reduction function `fn`.
+            for step in range(reduce_size):
+                # Update the index along the reduction dimension.
+                out_index[reduce_dim] = step
+
+                # Convert the updated multi-dimensional index to the corresponding input position.
+                j = index_to_position(out_index, a_strides)
+
+                # Apply the reduction function to combine the current value and the input element.
+                out[o] = fn(out[o], a_storage[j])
     return njit(_reduce, parallel=True)  # type: ignore
 
 
@@ -345,26 +369,33 @@ def _tensor_matrix_multiply(
         None : Fills in `out`
 
     """
-    assert a_shape[-1] == b_shape[-2], "Shapes do not match for matrix mult."
-
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
 
-    for batch in prange(out_shape[0]):
-        for i in range(out_shape[-2]):
-            for j in range(out_shape[-1]):
-                a_pos = batch * a_batch_stride + i * a_strides[-2]
-                b_pos = batch * b_batch_stride + j * b_strides[-1]
-                acc = 0.0
-                for _ in range(a_shape[-1]):
-                    acc += a_storage[a_pos] * b_storage[b_pos]
-                    a_pos += a_strides[-1]
-                    b_pos += b_strides[-2]
+    # Ensure dimensions are compatible for matrix multiplication.
+    assert a_shape[-1] == b_shape[-2]
 
-                out_pos = (
-                    i * out_strides[-2] + j * out_strides[-1] + batch * out_strides[0]
-                )
-                out[out_pos] = acc
+    # Outer loop over the batch dimension (parallelized).
+    for batch in prange(out_shape[0]):
+        # Loop over the rows (j) and columns (i) of the output matrix.
+        for i in range(out_shape[-1]):  # Column index in the output matrix.
+            for j in range(out_shape[-2]):  # Row index in the output matrix.
+                # Compute the starting positions for the current row of `a` and column of `b`.
+                a_pos = batch * a_batch_stride + j * a_strides[-2]
+                b_pos = batch * b_batch_stride + i * b_strides[-1]
+
+                # Initialize the accumulator for the dot product.
+                acc = 0.0
+
+                # Reduction loop over the shared dimension.
+                for _ in range(a_shape[-1]):
+                    acc += a_storage[a_pos] * b_storage[b_pos]  # Dot product accumulation.
+                    a_pos += a_strides[-1]  # Move to the next element in the current row of `a`.
+                    b_pos += b_strides[-2]  # Move to the next element in the current column of `b`.
+
+                # Compute the position in the output tensor and store the result.
+                o = j * out_strides[-2] + i * out_strides[-1] + batch * out_strides[0]
+                out[o] = acc  # Store the accumulated value.
 
 
 tensor_matrix_multiply = njit(_tensor_matrix_multiply, parallel=True)
