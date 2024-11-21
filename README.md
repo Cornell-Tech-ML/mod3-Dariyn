@@ -373,7 +373,7 @@ Graph
 <img src="images/3.4_graph.png" width="75">
 
 
-Task 3.5
+Task 3.5 - Hidden size = 100
 Split gpu
 
 <img src="images/3.5_split_gpu.png" width="75%">
@@ -397,3 +397,29 @@ Xor gpu
 Xor cpu
 
 <img src="images/3.5_xor_cpu.png" width="75%">
+
+Task 3.5 - Hidden size = 200
+
+Split gpu
+
+<img src="images/3.5_split_gpu_large.png" width="75%">
+
+Split cpu
+
+<img src="images/3.5_split_cpu_large.png" width="75%">
+
+Simple gpu
+
+<img src="images/3.5_simple_gpu_large.png" width="75%">
+
+Simple cpu
+
+<img src="images/3.5_simple_cpu_large.png" width="75%">
+
+Xor gpu
+
+<img src="images/3.5_xor_gpu_large.png" width="75%">
+
+Xor cpu
+
+<img src="images/3.5_xor_cpu_large.png" width="75%">
