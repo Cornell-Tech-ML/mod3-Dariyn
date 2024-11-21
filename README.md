@@ -366,11 +366,11 @@ None
 Task 3.4
 We can see that GPU does indeed run faster for larger matrices
 
-<img src="images/3.4_timing.png" width="75">
+<img src="images/3.4_timing.png" width="75%">
 
 Graph
 
-<img src="images/3.4_graph.png" width="75">
+<img src="images/3.4_graph.png" width="75%">
 
 
 Task 3.5 - Hidden size = 100
